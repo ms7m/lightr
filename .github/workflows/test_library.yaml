@@ -1,0 +1,25 @@
+name: Test Latest Commit
+on:
+  push:
+    paths:
+      - 'lightr/**'
+      - "poetry.lock"
+      - "pyproject.toml"
+      - "tests/**"
+  workflow_dispatch:
+
+jobs:
+  test-library:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install poetry
+        run: pipx install poetry
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          cache: "poetry"
+      - run: poetry install
+      # Weird bug with pip? it seems to be stuck if we add it normally.
+      - run: poetry run pip install odmantic 
+      - run: poetry run pytest tests

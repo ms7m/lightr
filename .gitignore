@@ -1,0 +1,7 @@
+logs/*
+*.pyc
+test-*.py
+debug.py
+.vscode/*
+__pycache__
+test.*

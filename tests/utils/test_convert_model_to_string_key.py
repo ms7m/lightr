@@ -1,6 +1,6 @@
 
 
-from lightr.utils.convert_model_to_string_key import to_snake_case, get_name_from_model
+from ridant.utils.convert_model_to_string_key import to_snake_case, get_name_from_model
 from pydantic import BaseModel
 from odmantic import Model
 

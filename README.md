@@ -1,4 +1,4 @@
-# lightr
+# ridant
 ***
 
 lightweight redis caching with pydantic (or odmantic) models.

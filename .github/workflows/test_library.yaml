@@ -2,7 +2,7 @@ name: Test Latest Commit
 on:
   push:
     paths:
-      - 'lightr/**'
+      - 'ridant/**'
       - "poetry.lock"
       - "pyproject.toml"
       - "tests/**"
@@ -11,6 +11,19 @@ on:
 jobs:
   test-library:
     runs-on: ubuntu-latest
+
+    services:
+      # Label used to access the service container
+      redis:
+        # Docker Hub image
+        image: redis
+        # Set health checks to wait until redis has started
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v3
       - name: Install poetry
@@ -20,6 +33,4 @@ jobs:
           python-version: "3.9"
           cache: "poetry"
       - run: poetry install
-      # Weird bug with pip? it seems to be stuck if we add it normally.
-      - run: poetry run pip install odmantic 
       - run: poetry run pytest tests

@@ -51,19 +51,22 @@ class RidantCache(object):
 
         self.default_hset_uid_key = default_hset_uid_key
 
-        if use_different_db_for_hash:
+        if redis_database_for_hash:
             self._redis_connection_hash_only = Redis(
                 connection_pool=redis_connection_pool,
                 port=redis_port,
                 host=redis_host,
-                db=redis_database_for_hash,
+                db=redis_database_for_hash if redis_database_for_hash else redis_database,
             )
+            logger.debug(f"Redis Hashed Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database_for_hash if redis_database_for_hash else redis_database}>")
         else:
             self._redis_connection_hash_only = None
+            logger.debug(f"Redis Hashed Connection Information: <none>")
 
         self._redis_connection = Redis(
             connection_pool=redis_connection_pool,
         )
+        logger.debug(f"Redis Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database}>")
 
     @property
     def redis(self) -> Redis:
@@ -71,8 +74,8 @@ class RidantCache(object):
 
     @property
     def redis_hashed(self) -> Redis:
-        if self._redis_connection_hash_only is None:
-            return self._redis_connection
+        if self._redis_connection_hash_only is not None:
+            return self._redis_connection_hash_only
         raise ValueError("Hashed redis client is not available.")
 
     async def _get(self, key_name_provided: str) -> Coroutine[bytes]:

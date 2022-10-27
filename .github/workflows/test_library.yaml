@@ -6,25 +6,19 @@ on:
       - "poetry.lock"
       - "pyproject.toml"
       - "tests/**"
+      - ".github/workflows/test_library.yaml"
   workflow_dispatch:
 
 jobs:
   test-library:
     runs-on: ubuntu-latest
 
-    services:
-      # Label used to access the service container
-      redis:
-        # Docker Hub image
-        image: redis
-        # Set health checks to wait until redis has started
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-port: 6379
       - uses: actions/checkout@v3
       - name: Install poetry
         run: pipx install poetry
@@ -34,8 +28,3 @@ jobs:
           cache: "poetry"
       - run: poetry install
       - run: poetry run pytest tests
-        env:
-          # The hostname used to communicate with the Redis service container
-          REDIS_HOST: redis
-          # The default Redis port
-          REDIS_PORT: 6379

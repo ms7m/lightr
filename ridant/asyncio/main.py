@@ -13,8 +13,6 @@ if typing.TYPE_CHECKING:
 ModelPassed = typing.TypeVar("ModelPassed", BaseModel, "Model")
 
 
-
-
 class RidantCache(object):
     def __init__(
         self,
@@ -56,9 +54,13 @@ class RidantCache(object):
                 connection_pool=redis_connection_pool,
                 port=redis_port,
                 host=redis_host,
-                db=redis_database_for_hash if redis_database_for_hash else redis_database,
+                db=redis_database_for_hash
+                if redis_database_for_hash
+                else redis_database,
             )
-            logger.debug(f"Redis Hashed Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database_for_hash if redis_database_for_hash else redis_database}>")
+            logger.debug(
+                f"Redis Hashed Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database_for_hash if redis_database_for_hash else redis_database}>"
+            )
         else:
             self._redis_connection_hash_only = None
             logger.debug(f"Redis Hashed Connection Information: <none>")
@@ -66,15 +68,25 @@ class RidantCache(object):
         self._redis_connection = Redis(
             connection_pool=redis_connection_pool,
         )
-        logger.debug(f"Redis Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database}>")
+        logger.debug(
+            f"Redis Connection Information: <host: {redis_host}, port: {redis_port}, db: {redis_database}>"
+        )
 
     @property
     def redis(self) -> Redis:
         return self._redis_connection
 
     @staticmethod
-    def generate_key_name(model: ModelPassed, uid: str) -> str:
-        return ":".join([get_name_from_model(model), uid])
+    def generate_key_name(model: typing.Union[ModelPassed, str], uid: str) -> str:
+        if isinstance(model, str):
+            return f"{model}:{uid}"
+        else:
+            return ":".join([get_name_from_model(model), uid])
+
+    def _item_be_converted_to_dict(self, item: typing.Any) -> typing.TypeVar("item"):
+        if isinstance(self._convert_object_to_safe_redis_type(item), dict):
+            return item
+        return False
 
     @property
     def redis_hashed(self) -> Redis:
@@ -99,10 +111,10 @@ class RidantCache(object):
             # Just to make sure that all values can be set in redis
             val: dict = json.loads(val.json())
         else:
-            
+
             if isinstance(val, (int, float, str, bool)):
                 return val
-            
+
             try:
                 _attempt_to_convert_to_dict = json.loads(val)
                 return _attempt_to_convert_to_dict
@@ -117,28 +129,31 @@ class RidantCache(object):
         return val
 
     async def _hash_cache_attribute(
-        self, attr: str, value: typing.Any, model: typing.Optional[ModelPassed] = None, key_name: typing.Optional[str] = None, redis_instance: Redis = None, uid: typing.Optional[str] = None, 
+        self,
+        attr: str,
+        value: typing.Any,
+        model: typing.Optional[ModelPassed] = None,
+        key_name: typing.Optional[str] = None,
+        redis_instance: Redis = None,
+        uid: typing.Optional[str] = None,
     ) -> typing.Any:
         if redis_instance is None:
             redis_instance = self.redis_hashed
-        
+
         if model is None and key_name is not None:
             logger.debug(f"Using provided key name: '{key_name}' for hset")
-            return await  redis_instance.hset(
-                key_name, attr, value
-            )
-            
-        
+            return await redis_instance.hset(key_name, attr, value)
+
         if uid is None and self.default_hset_uid_key is None:
             raise ValueError("No uid provided and no default uid key provided")
         else:
-            
+
             _generated_key_name = [
                 get_name_from_model(model),
                 uid if uid is not None else self.default_hset_uid_key,
             ]
             _generated_key_name = ":".join(_generated_key_name)
-        
+
         return await redis_instance.hset(_generated_key_name, attr, value)
 
     async def _hash_cache(
@@ -156,14 +171,20 @@ class RidantCache(object):
                             f"Please avoid using lists or dicts, You will need to overwrite the entire key in order to update. Key: {key}, Value: {value}"
                         )
                         await self._hash_cache_attribute(
-                            key_name=key_name_provided, attr=key, value= json.dumps(value), redis_instance=pipe
+                            key_name=key_name_provided,
+                            attr=key,
+                            value=json.dumps(value),
+                            redis_instance=pipe,
                         )
 
                     else:
                         await self._hash_cache_attribute(
-                            key_name=key_name_provided, attr=key, value= value, redis_instance=pipe
+                            key_name=key_name_provided,
+                            attr=key,
+                            value=value,
+                            redis_instance=pipe,
                         )
-                        
+
                 await pipe.execute()
         except Exception:
             logger.exception("Unable to cache with hset")
@@ -180,6 +201,49 @@ class RidantCache(object):
         return await self.redis.set(
             key_name_provided, value_provided, **extra_redis_arguments
         )
+
+
+    async def find_one_by_group(
+        self, group: str, uid: str
+    )-> Coroutine[typing.Optional[str]]:
+        _res = await self._get(
+            key_name_provided=self.generate_key_name(model=group, uid=uid)
+        )
+        if _res and isinstance(_res, bytes):
+            return _res.decode("utf-8")
+        elif _res is not None:
+            return _res
+        return None
+
+
+    async def cache_by_group(
+        self,
+        group: str,
+        uid: str,
+        value: typing.Union[BaseModel, typing.Any],
+        extra_redis_arguments: typing.Optional[dict] = {},
+        hash: bool = False,
+    ) -> Coroutine[bool]:
+        _generated_key_name = [group, uid]
+
+        if hash:
+            logger.debug(f"hash argument provided, using hset instead of set")
+
+            _can_item_be_hashsed = self._item_be_converted_to_dict(item=value)
+            if _can_item_be_hashsed == False:
+                raise TypeError("Item passed cannot be broken down and hashed.")
+
+            return await self._hash_cache(
+                key_name_provided=":".join(_generated_key_name),
+                value_provided=_can_item_be_hashsed,
+                extra_redis_arguments=extra_redis_arguments,
+            )
+        else:
+            return await self._cache(
+                ":".join(_generated_key_name),
+                self._convert_object_to_safe_redis_type(val=value),
+                extra_redis_arguments,
+            )
 
     async def cache(
         self,
@@ -239,7 +303,7 @@ class RidantCache(object):
 
     async def delete(self, model: ModelPassed, uid: str) -> Coroutine[bool]:
         return await self._clear_key(":".join([get_name_from_model(model), uid]))
-    
+
     async def update(
         self,
         model: ModelPassed,
@@ -264,7 +328,7 @@ class RidantCache(object):
                 key_name=get_name_from_model(model) + ":" + uid,
                 attr=attribute_to_update,
                 value=attribute_value_to_be_updated_to,
-                #extra_redis_arguments=extra_redis_arguments,
+                # extra_redis_arguments=extra_redis_arguments,
             )
         else:
             logger.warning("If you're not updating a specific attribute, use cache()")

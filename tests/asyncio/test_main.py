@@ -47,3 +47,9 @@ async def test_hash_update_cache_item(return_connection_pool_for_async_redis):
     await cache.find_one(SamplePydanticModel, "test", "age") == 2
     
     
+async def test_hash_update_cache_item(return_connection_pool_for_async_redis):
+    cache = RidantCache(redis_connection_pool=return_connection_pool_for_async_redis, redis_database_for_hash=1 )
+    await cache.cache_by_group("testing-group", "sample-uid", "coolValue")
+    assert await cache.find_one_by_group("testing-group", "sample-uid") == "coolValue"
+    await cache.cache_by_group("testing-group", "sample-uid", 2)
+    assert await cache.find_one_by_group("testing-group", "sample-uid") == "2"

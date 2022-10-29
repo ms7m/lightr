@@ -304,6 +304,9 @@ class RidantCache(object):
     async def delete(self, model: ModelPassed, uid: str) -> Coroutine[bool]:
         return await self._clear_key(":".join([get_name_from_model(model), uid]))
 
+    async def delete_by_group(self, group: str, uid: str) -> Coroutine[bool]:
+        return await self._clear_key(self.generate_key_name(model=group, uid=uid))
+
     async def update(
         self,
         model: ModelPassed,

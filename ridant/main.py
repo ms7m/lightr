@@ -202,19 +202,13 @@ class RidantCache(object):
             key_name_provided, value_provided, **extra_redis_arguments
         )
 
-
-    def find_one_by_group(
-        self, group: str, uid: str
-    )-> typing.Optional[str]:
-        _res = self._get(
-            key_name_provided=self.generate_key_name(model=group, uid=uid)
-        )
+    def find_one_by_group(self, group: str, uid: str) -> typing.Optional[str]:
+        _res = self._get(key_name_provided=self.generate_key_name(model=group, uid=uid))
         if _res and isinstance(_res, bytes):
             return _res.decode("utf-8")
         elif _res is not None:
             return _res
         return None
-
 
     def cache_by_group(
         self,
@@ -303,6 +297,9 @@ class RidantCache(object):
 
     def delete(self, model: ModelPassed, uid: str) -> bool:
         return self._clear_key(":".join([get_name_from_model(model), uid]))
+
+    def delete_by_group(self, group: str, uid: str) -> bool:
+        return self._clear_key(self.generate_key_name(model=group, uid=uid))
 
     def update(
         self,

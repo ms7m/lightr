@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ridant"
-version = "0.0.3"
+version = "0.0.4"
 description = ""
 authors = ["Mustafa Mohamed <git@ms7m.me>"]
 readme = "README.md"

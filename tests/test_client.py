@@ -28,9 +28,13 @@ def test_cache_item(return_connection_pool_for_sync_redis):
 def test_delete_cache_item(return_connection_pool_for_sync_redis):
     cache = RidantCache(redis_connection_pool=return_connection_pool_for_sync_redis)
     cache.cache(SamplePydanticModel(name="test", age=1), "test")
+    cache.cache_by_group("testing-group", "sample-uid", "coolValue")
     assert cache.find_one(SamplePydanticModel, "test") == SamplePydanticModel(name="test", age=1)
+    assert cache.find_one_by_group("testing-group", "sample-uid") == "coolValue"
     assert cache.delete(SamplePydanticModel, "test") == True
     assert cache.find_one(SamplePydanticModel, "test") == None
+    assert cache.delete_by_group("testing-group", "sample-uid") == True
+    assert cache.find_one_by_group("testing-group", "sample-uid") == None
     
     
 def test_hash_set_cache_item(return_connection_pool_for_sync_redis):

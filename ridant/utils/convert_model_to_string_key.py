@@ -35,3 +35,4 @@ def get_name_from_model(model: typing.Union["Model", "BaseModel"]) -> str:
             return to_snake_case(model.__class__.__name__)
         
         raise ValueError(f"Could not determine name from model {model} -- please provide a cacheable_group_name attribute to the model's config.")
+

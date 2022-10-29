@@ -4,6 +4,7 @@ from loguru import logger
 from redis.asyncio import Redis, ConnectionPool
 from pydantic import BaseModel
 from collections.abc import Awaitable, Coroutine
+from ridant.main import RidantCache as SyncRidantCache
 
 import json
 
@@ -13,7 +14,7 @@ if typing.TYPE_CHECKING:
 ModelPassed = typing.TypeVar("ModelPassed", BaseModel, "Model")
 
 
-class RidantCache(object):
+class RidantCache(SyncRidantCache):
     def __init__(
         self,
         redis_connection_pool: typing.Optional[ConnectionPool] = None,
@@ -76,12 +77,6 @@ class RidantCache(object):
     def redis(self) -> Redis:
         return self._redis_connection
 
-    @staticmethod
-    def generate_key_name(model: typing.Union[ModelPassed, str], uid: str) -> str:
-        if isinstance(model, str):
-            return f"{model}:{uid}"
-        else:
-            return ":".join([get_name_from_model(model), uid])
 
     def _item_be_converted_to_dict(self, item: typing.Any) -> typing.TypeVar("item"):
         if isinstance(self._convert_object_to_safe_redis_type(item), dict):
@@ -104,29 +99,6 @@ class RidantCache(object):
         self, key_name_provided: str
     ) -> Coroutine[typing.Iterator[typing.Any]]:
         return await self.redis.scan_iter(key_name_provided)
-
-    @staticmethod
-    def _convert_object_to_safe_redis_type(val: typing.Union[BaseModel, typing.Any]):
-        if hasattr(val, "dict") and callable(val.dict):
-            # Just to make sure that all values can be set in redis
-            val: dict = json.loads(val.json())
-        else:
-
-            if isinstance(val, (int, float, str, bool)):
-                return val
-
-            try:
-                _attempt_to_convert_to_dict = json.loads(val)
-                return _attempt_to_convert_to_dict
-            except Exception:
-                logger.exception(
-                    "Unable to convert to dict (this was a fallback attempt as the the object did not have a .dict() method)"
-                )
-                raise ValueError(
-                    "Unable to convert to dict (this was a fallback attempt as the the object did not have a .dict() method)"
-                )
-
-        return val
 
     async def _hash_cache_attribute(
         self,
@@ -165,26 +137,14 @@ class RidantCache(object):
         _values = self._convert_object_to_safe_redis_type(val=value_provided)
         try:
             async with self.redis_hashed.pipeline() as pipe:
-                for key, value in _values.items():
-                    if isinstance(value, (list, dict)):
-                        logger.warning(
-                            f"Please avoid using lists or dicts, You will need to overwrite the entire key in order to update. Key: {key}, Value: {value}"
-                        )
-                        await self._hash_cache_attribute(
-                            key_name=key_name_provided,
-                            attr=key,
-                            value=json.dumps(value),
-                            redis_instance=pipe,
-                        )
+                _determine_commands_for_pipe = self._determine_pipeline_commands_needed(_values)
+                for piped_command in _determine_commands_for_pipe:
+                    logger.debug(f"Piping command {piped_command[0]} with a value of {piped_command[1]}")
+                    await self._hash_cache_attribute(
+                        key_name=key_name_provided, attr=piped_command[0], value=piped_command[1], redis_instance=pipe
+                    )
 
-                    else:
-                        await self._hash_cache_attribute(
-                            key_name=key_name_provided,
-                            attr=key,
-                            value=value,
-                            redis_instance=pipe,
-                        )
-
+                logger.debug(f"Running pipeline with {len(_determine_commands_for_pipe)} ==> {iter(pipe.command_stack)} commands")
                 await pipe.execute()
         except Exception:
             logger.exception("Unable to cache with hset")

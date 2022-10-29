@@ -4,8 +4,8 @@ from loguru import logger
 from redis import Redis, ConnectionPool
 from pydantic import BaseModel
 from collections.abc import Awaitable, Coroutine
-
 import json
+from ridant.utils.caching_tools import flatten_dict_for_caching
 
 if typing.TYPE_CHECKING:
     from odmantic import Model
@@ -77,9 +77,13 @@ class RidantCache(object):
         return self._redis_connection
 
     @staticmethod
-    def generate_key_name(model: typing.Union[ModelPassed, str], uid: str) -> str:
+    def generate_key_name(model: typing.Union[ModelPassed, str], uid: str, *extra_items) -> str:
         if isinstance(model, str):
-            return f"{model}:{uid}"
+            _key = [model, uid]
+            if extra_items:
+                _extra_keys = [str(x) for x in extra_items]
+                _key.extend(_extra_keys)
+            return ":".join(_key)
         else:
             return ":".join([get_name_from_model(model), uid])
 
@@ -156,6 +160,24 @@ class RidantCache(object):
 
         return redis_instance.hset(_generated_key_name, attr, value)
 
+    @staticmethod
+    def _determine_pipeline_commands_needed(model: dict, base_uid_key: str = None) -> typing.List[typing.Tuple[str, str]]:
+        if not isinstance(model, dict):
+            raise TypeError("Model must be a dict")
+        
+        
+        _parse_flattened_dict = flatten_dict_for_caching(model)
+        
+        _commands = []
+        for key, value in _parse_flattened_dict.items():
+            if base_uid_key is not None:
+                key = ":".join([base_uid_key, key])
+            
+            _commands.append((key, value))
+            
+        return _commands
+    
+    
     def _hash_cache(
         self,
         key_name_provided: str,
@@ -165,26 +187,14 @@ class RidantCache(object):
         _values = self._convert_object_to_safe_redis_type(val=value_provided)
         try:
             with self.redis_hashed.pipeline() as pipe:
-                for key, value in _values.items():
-                    if isinstance(value, (list, dict)):
-                        logger.warning(
-                            f"Please avoid using lists or dicts, You will need to overwrite the entire key in order to update. Key: {key}, Value: {value}"
-                        )
-                        self._hash_cache_attribute(
-                            key_name=key_name_provided,
-                            attr=key,
-                            value=json.dumps(value),
-                            redis_instance=pipe,
-                        )
+                _determine_commands_for_pipe = self._determine_pipeline_commands_needed(_values)
+                for piped_command in _determine_commands_for_pipe:
+                    logger.debug(f"Piping command {piped_command[0]} with a value of {piped_command[1]}")
+                    self._hash_cache_attribute(
+                        key_name=key_name_provided, attr=piped_command[0], value=piped_command[1], redis_instance=pipe
+                    )
 
-                    else:
-                        self._hash_cache_attribute(
-                            key_name=key_name_provided,
-                            attr=key,
-                            value=value,
-                            redis_instance=pipe,
-                        )
-
+                logger.debug(f"Running pipeline with {len(_determine_commands_for_pipe)} ==> {iter(pipe.command_stack)} commands")
                 pipe.execute()
         except Exception:
             logger.exception("Unable to cache with hset")

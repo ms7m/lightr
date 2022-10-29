@@ -33,3 +33,5 @@ def test_get_name_from_model():
     assert get_name_from_model(ExampleOdanticModel) == "example_odantic_model", "Odantic model name should be converted to snake case"
     assert get_name_from_model(ExamplePydanticModelWithConfig) == "CustomGroupNamePydnaticModel", "Pydantic model name should from Config"
     assert get_name_from_model(ExampleOdmanticModelWithConfig) == "CustomGroupNameOdmanticModel", "Odmantic model name should from Config"
+    
+    

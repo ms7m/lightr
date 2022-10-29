@@ -45,3 +45,5 @@ async def test_hash_update_cache_item(return_connection_pool_for_async_redis):
     await cache.update(SamplePydanticModel, "test", "age", 2)
     await cache.find_one(SamplePydanticModel, "test", "name") == "test"
     await cache.find_one(SamplePydanticModel, "test", "age") == 2
+    
+    

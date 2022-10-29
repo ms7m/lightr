@@ -72,6 +72,10 @@ class RidantCache(object):
     def redis(self) -> Redis:
         return self._redis_connection
 
+    @staticmethod
+    def generate_key_name(model: ModelPassed, uid: str) -> str:
+        return ":".join([get_name_from_model(model), uid])
+
     @property
     def redis_hashed(self) -> Redis:
         if self._redis_connection_hash_only is not None:

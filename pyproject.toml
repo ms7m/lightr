@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ridant"
-version = "0.0.1"
+version = "0.0.2"
 description = ""
 authors = ["Mustafa Mohamed <git@ms7m.me>"]
 readme = "README.md"
@@ -9,7 +9,7 @@ readme = "README.md"
 python = "^3.9"
 redis = "^4.3.4"
 loguru = "^0.6.0"
-pydantic = "^1.10.2"
+pydantic = "1.9.1"
 
 
 [tool.poetry.group.dev.dependencies]
